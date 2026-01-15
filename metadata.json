@@ -1,0 +1,7 @@
+{
+  "name": "河东狮吼，灭火器",
+  "description": "A voice interaction tool for stress relief and emotional management, featuring real-time decibel analysis, visual screen shattering effects, and intelligent soothing prompts.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
