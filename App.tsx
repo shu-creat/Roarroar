@@ -43,6 +43,7 @@ export default function App() {
   // Refs for logic that shouldn't trigger re-renders or needs immediate access
   const lastTriggerTimeRef = useRef<number>(0);
   const maxDbRef = useRef<number>(30); 
+  const startTimeRef = useRef<number>(0);
 
   // Visual Intensity (0 - 1) derived from dB
   const intensity = Math.max(0, Math.min(1, (db - 30) / (THRESHOLDS.MAX - 30)));
@@ -113,6 +114,9 @@ export default function App() {
 
   const startApp = async () => {
     try {
+      startTimeRef.current = Date.now();
+      maxDbRef.current = 30; // Reset max db
+      setHistory([]); // Reset history
       await audioService.startListening(handleDecibelUpdate);
       setState(AppState.LISTENING);
     } catch (e) {
@@ -121,7 +125,19 @@ export default function App() {
     }
   };
 
+  const stopApp = () => {
+    audioService.stop();
+    setState(AppState.SUMMARY);
+  };
+
+  const restartApp = () => {
+    setState(AppState.IDLE);
+    setDb(30);
+    setSoothingType(null);
+  };
+
   const getBackgroundColor = () => {
+    if (state === AppState.SUMMARY) return 'bg-slate-900';
     if (soothingType === 'EXPLOSION') return 'bg-orange-950'; 
     if (soothingType === 'WARNING') return 'bg-indigo-950';
     
@@ -130,11 +146,40 @@ export default function App() {
     return 'bg-red-950';
   };
 
+  // Summary Calculation Logic
+  const getSummaryData = () => {
+    const durationSeconds = Math.round((Date.now() - startTimeRef.current) / 1000);
+    const minutes = Math.floor(durationSeconds / 60);
+    const seconds = durationSeconds % 60;
+    const timeString = minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`;
+    
+    const explosionCount = history.filter(h => h.type === 'EXPLOSION').length;
+    const warningCount = history.filter(h => h.type === 'WARNING').length;
+    
+    let advice = "";
+    let title = "";
+    
+    if (explosionCount > 5) {
+      title = "🔥 情绪过山车";
+      advice = "今天的你承受了太多压力。虽然发泄出来了，但现在的你一定很累吧？记得给自己一个大大的拥抱，喝杯热茶，今晚早点休息。";
+    } else if (explosionCount > 0 || warningCount > 3) {
+      title = "🌊 些许波澜";
+      advice = "生活总有不如意，适度的宣泄是有益身心健康的。你控制得很棒，现在试着深呼吸三次，让心跳慢下来。";
+    } else {
+      title = "🕊️ 内心平和大师";
+      advice = "太强了！在如此嘈杂的世界中，你依然保持着内心的宁静。这种情绪稳定性简直就是超能力，继续保持这份从容吧！";
+    }
+
+    return { timeString, explosionCount, warningCount, title, advice, maxDb: maxDbRef.current };
+  };
+
+  const summary = state === AppState.SUMMARY ? getSummaryData() : null;
+
   return (
     <div className={`relative w-full h-screen overflow-hidden transition-colors duration-300 ease-out ${getBackgroundColor()} ${shakeClass}`}>
       
       {/* 1. Visual Effects Layer */}
-      <CrackOverlay intensity={intensity} />
+      {state === AppState.LISTENING && <CrackOverlay intensity={intensity} />}
       {state === AppState.LISTENING && <ParticleSystem intensity={intensity} />}
 
       {/* 2. Main Content */}
@@ -170,10 +215,10 @@ export default function App() {
           )}
 
           {state === AppState.LISTENING && (
-            <div className="text-center relative flex flex-col items-center w-full">
+            <div className="text-center relative flex flex-col items-center w-full h-full justify-center">
               
               {/* Fun Quote Bubble */}
-              <div className={`absolute -top-32 left-1/2 -translate-x-1/2 w-64 transition-all duration-300 ${db > 50 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+              <div className={`absolute top-10 sm:top-20 left-1/2 -translate-x-1/2 w-64 transition-all duration-300 ${db > 50 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                  <div className="bg-white text-slate-900 px-4 py-3 rounded-2xl rounded-bl-none shadow-[0_0_15px_rgba(255,255,255,0.3)] font-bold text-lg relative animate-in zoom-in slide-in-from-bottom-2">
                     {currentQuote}
                     <div className="absolute -bottom-2 left-0 w-4 h-4 bg-white clip-polygon-corner"></div>
@@ -222,7 +267,62 @@ export default function App() {
                   <span className="text-xl font-bold text-white/40">dB</span>
                 </div>
               </div>
+              
+              {/* Stop Button */}
+              <button 
+                onClick={stopApp}
+                className="absolute top-4 right-4 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-full p-4 backdrop-blur-md border border-red-500/30 transition-all active:scale-95 group z-50"
+                title="结束记录"
+              >
+                <div className="w-4 h-4 bg-red-400 rounded-sm group-hover:bg-red-200 transition-colors"></div>
+              </button>
 
+            </div>
+          )}
+
+          {state === AppState.SUMMARY && summary && (
+            <div className="w-full max-w-sm mx-auto animate-in slide-in-from-bottom-10 fade-in duration-500">
+              <div className="bg-slate-800/80 backdrop-blur-xl rounded-3xl p-8 border border-white/10 shadow-2xl relative overflow-hidden">
+                
+                {/* Decorative blob */}
+                <div className="absolute -top-20 -right-20 w-40 h-40 bg-purple-500/30 rounded-full blur-3xl"></div>
+                <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-500/30 rounded-full blur-3xl"></div>
+
+                <div className="relative z-10 text-center">
+                  <h2 className="text-3xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-purple-200 to-pink-200">
+                    {summary.title}
+                  </h2>
+                  <p className="text-gray-400 text-sm mb-8">本次情绪记录报告</p>
+
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="bg-black/20 p-3 rounded-2xl">
+                       <div className="text-2xl font-mono font-bold text-white">{summary.timeString}</div>
+                       <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">记录时长</div>
+                    </div>
+                    <div className="bg-black/20 p-3 rounded-2xl">
+                       <div className="text-2xl font-mono font-bold text-red-400">{summary.maxDb}</div>
+                       <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">最高分贝</div>
+                    </div>
+                    <div className="bg-black/20 p-3 rounded-2xl">
+                       <div className="text-2xl font-mono font-bold text-orange-400">{summary.explosionCount}</div>
+                       <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">情绪爆发</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 p-5 rounded-2xl text-left border-l-4 border-purple-400 mb-8">
+                    <p className="text-gray-200 leading-relaxed text-sm">
+                      “{summary.advice}”
+                    </p>
+                  </div>
+
+                  <button 
+                    onClick={restartApp}
+                    className="w-full py-4 bg-white text-slate-900 rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors active:scale-95 shadow-lg"
+                  >
+                    再次开启 🕊️
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

@@ -1,7 +1,8 @@
 export enum AppState {
   IDLE = 'IDLE',
   LISTENING = 'LISTENING',
-  ERROR = 'ERROR'
+  ERROR = 'ERROR',
+  SUMMARY = 'SUMMARY'
 }
 
 export interface LogEntry {
